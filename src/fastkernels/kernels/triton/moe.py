@@ -4,18 +4,32 @@ from __future__ import annotations
 
 from typing import Any
 
+torch = None
+triton = None
+tl = None
+_fused_swiglu_kernel = None
+_expert_histogram_kernel = None
 
-def _load_triton() -> tuple[Any, Any]:
+
+def _load_triton() -> tuple[Any, Any, Any]:
+    global torch, triton, tl
     try:
-        import torch
-        import triton
-        import triton.language as tl
+        import torch as torch_module
+        import triton as triton_module
+        import triton.language as tl_module
     except ImportError as exc:  # pragma: no cover - depends on optional packages
         raise RuntimeError("Triton and PyTorch are required for this kernel") from exc
+    torch = torch_module
+    triton = triton_module
+    tl = tl_module
     return torch, triton, tl
 
 
 def _compile_fused_swiglu_kernel(triton: Any, tl: Any) -> Any:
+    global _fused_swiglu_kernel
+    if _fused_swiglu_kernel is not None:
+        return _fused_swiglu_kernel
+
     @triton.jit
     def _kernel(gate_up, out, total_elements: tl.constexpr, intermediate: tl.constexpr, block: tl.constexpr):
         offsets = tl.program_id(0) * block + tl.arange(0, block)
@@ -23,16 +37,22 @@ def _compile_fused_swiglu_kernel(triton: Any, tl: Any) -> Any:
         row = offsets // intermediate
         col = offsets - row * intermediate
 
-        gate = tl.load(gate_up + row * (2 * intermediate) + col, mask=mask, other=0.0)
-        up = tl.load(gate_up + row * (2 * intermediate) + intermediate + col, mask=mask, other=0.0)
+        row_offset = row * (2 * intermediate)
+        gate = tl.load(gate_up + row_offset + col, mask=mask, other=0.0).to(tl.float32)
+        up = tl.load(gate_up + row_offset + intermediate + col, mask=mask, other=0.0).to(tl.float32)
         sigmoid = 1.0 / (1.0 + tl.exp(-gate))
         value = gate * sigmoid * up
         tl.store(out + offsets, value, mask=mask)
 
-    return _kernel
+    _fused_swiglu_kernel = _kernel
+    return _fused_swiglu_kernel
 
 
 def _compile_expert_histogram_kernel(triton: Any, tl: Any) -> Any:
+    global _expert_histogram_kernel
+    if _expert_histogram_kernel is not None:
+        return _expert_histogram_kernel
+
     @triton.jit
     def _kernel(topk_ids, counts, total_ids: tl.constexpr, block: tl.constexpr):
         offsets = tl.program_id(0) * block + tl.arange(0, block)
@@ -40,7 +60,8 @@ def _compile_expert_histogram_kernel(triton: Any, tl: Any) -> Any:
         expert_ids = tl.load(topk_ids + offsets, mask=mask, other=0)
         tl.atomic_add(counts + expert_ids, 1, sem="relaxed", mask=mask)
 
-    return _kernel
+    _expert_histogram_kernel = _kernel
+    return _expert_histogram_kernel
 
 
 def triton_fused_swiglu(gate_up: Any, *, block_size: int = 256) -> Any:
