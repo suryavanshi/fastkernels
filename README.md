@@ -47,6 +47,11 @@ print(fastkernels.__version__)
 - Optional Triton MoE building blocks in `fastkernels.kernels.triton`.
 - Benchmark and correctness entrypoints under `bench/`.
 - Detailed execution plan in `docs/QWEN35_KERNEL_PLAN.md`.
+- Qwen3.6 megakernel design notes in `docs/QWEN36_MEGAKERNEL_PLAN.md`.
+
+This repository does not yet contain a full all-layer Qwen DeltaNet/attention
+megakernel. The current tested CUDA path covers MoE building blocks such as
+fused SwiGLU and routed-expert histograms.
 
 ## Shape Report
 
@@ -75,3 +80,11 @@ In Colab, choose `Runtime > Change runtime type > GPU` before running the
 notebook. The notebook defaults to cloning the main repository, but you can set
 `FASTKERNELS_REPO` or `FASTKERNELS_BRANCH` in the first setup cell when testing
 a fork or branch.
+
+## Lambda GPU Instance
+
+For a persistent SSH workflow on Lambda Cloud, see
+[`docs/LAMBDA.md`](docs/LAMBDA.md). The runbook covers launching an instance,
+syncing a local checkout, installing CUDA-compatible PyTorch/Triton wheels,
+running the test suite, running the kernel microbenchmarks, and terminating the
+instance to stop billing.
