@@ -28,6 +28,8 @@ class Qwen36A3BSpec:
     rope_dim: int
     vocab_size: int
     context_length: int
+    layer_types: tuple[str, ...] | None = None
+    rope_theta: float = 10000.0
 
     @property
     def active_experts_per_token(self) -> int:
@@ -50,6 +52,11 @@ class Qwen36A3BSpec:
         return self.attention_heads // self.attention_kv_heads
 
     def layer_kinds(self) -> tuple[str, ...]:
+        if self.layer_types is not None:
+            return tuple(
+                "attention_moe" if layer_type == "full_attention" else "deltanet_moe"
+                for layer_type in self.layer_types
+            )
         pattern = ("deltanet_moe", "deltanet_moe", "deltanet_moe", "attention_moe")
         repeats, remainder = divmod(self.num_layers, len(pattern))
         return pattern * repeats + pattern[:remainder]
@@ -108,11 +115,24 @@ class Qwen36A3BSpec:
 
     @classmethod
     def from_hf_config(cls, config: dict[str, Any], name: str = "hf-config") -> "Qwen36A3BSpec":
+        text_config = config.get("text_config", config)
+
         def first(*keys: str, default: Any = None) -> Any:
             for key in keys:
+                if key in text_config and text_config[key] is not None:
+                    return text_config[key]
                 if key in config and config[key] is not None:
                     return config[key]
             return default
+
+        layer_types = first("layer_types")
+        rope_parameters = first("rope_parameters", default={}) or {}
+        partial_rotary_factor = first("partial_rotary_factor", default=rope_parameters.get("partial_rotary_factor"))
+        rope_theta = first("rope_theta", default=rope_parameters.get("rope_theta", 10000.0))
+        attention_head_dim = int(first("attention_head_dim", "head_dim", default=256))
+        rope_dim = first("rope_dim", "rotary_emb_base_dim")
+        if rope_dim is None and partial_rotary_factor is not None:
+            rope_dim = int(attention_head_dim * float(partial_rotary_factor))
 
         return cls(
             name=name,
@@ -124,15 +144,19 @@ class Qwen36A3BSpec:
             expert_intermediate_size=int(
                 first("moe_intermediate_size", "expert_intermediate_size", "intermediate_size")
             ),
-            deltanet_value_heads=int(first("num_linear_attention_value_heads", default=32)),
-            deltanet_qk_heads=int(first("num_linear_attention_qk_heads", default=16)),
-            deltanet_head_dim=int(first("linear_attention_head_dim", default=128)),
+            deltanet_value_heads=int(first("num_linear_attention_value_heads", "linear_num_value_heads", default=32)),
+            deltanet_qk_heads=int(first("num_linear_attention_qk_heads", "linear_num_key_heads", default=16)),
+            deltanet_head_dim=int(
+                first("linear_attention_head_dim", "linear_key_head_dim", "linear_value_head_dim", default=128)
+            ),
             attention_heads=int(first("num_attention_heads", default=16)),
             attention_kv_heads=int(first("num_key_value_heads", default=2)),
-            attention_head_dim=int(first("attention_head_dim", "head_dim", default=256)),
-            rope_dim=int(first("rope_dim", "rotary_emb_base_dim", default=64)),
+            attention_head_dim=attention_head_dim,
+            rope_dim=int(rope_dim or 64),
             vocab_size=int(first("vocab_size", default=248320)),
             context_length=int(first("max_position_embeddings", "seq_length", default=262144)),
+            layer_types=tuple(layer_types) if layer_types is not None else None,
+            rope_theta=float(rope_theta),
         )
 
     @classmethod
@@ -163,6 +187,7 @@ def qwen36_35b_a3b_spec() -> Qwen36A3BSpec:
         rope_dim=64,
         vocab_size=248320,
         context_length=262144,
+        rope_theta=10000000.0,
     )
 
 

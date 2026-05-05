@@ -36,6 +36,11 @@ weighted reduction.
 
 ## Initial Repo Milestones
 
+Current status: M0 and early M1 are in place. The repo has Qwen3.5 shape
+metadata, reference MoE helpers, Triton fused SwiGLU, Triton expert histogram,
+and synthetic Qwen3.6 decode kernels that exercise the same hybrid
+DeltaNet/attention/MoE pattern at tiny test shapes. M3/M4 are not complete.
+
 ### M0: Harness And Shape Truth
 
 - Add a Qwen3.5 model spec module.
@@ -67,6 +72,8 @@ weighted reduction.
 - Fuse MoE weighted reduction with residual writeback.
 - Add one full DeltaNet + MoE layer kernel prototype.
 - Add one full Attention + MoE layer kernel prototype.
+- Maintain mixed-mode benchmark switches so each fused path can be compared
+  against the PyTorch reference independently.
 
 ### M4: Persistent Decode And Megakernel
 
@@ -74,6 +81,22 @@ weighted reduction.
   `3 x (DeltaNet -> MoE) + 1 x (Attention -> MoE)`.
 - Extend to the full 40-layer schedule.
 - Add multi-GPU expert-parallel dispatch.
+- Add a real-weight loader or converter and token-level parity tests before
+  reporting model-level tokens/sec.
+
+## Completion Gates
+
+The full Qwen3.5-35B-A3B megakernel is complete only when:
+
+- Real Qwen3.5-35B-A3B weights run end to end.
+- The 40-layer decode schedule covers DeltaNet, attention, routed MoE, shared
+  expert, residuals, normalization, KV cache, and recurrent state updates.
+- Token outputs match a trusted Transformers, vLLM, or SGLang reference within
+  documented tolerances.
+- Benchmarks report decode and prefill tokens/sec under identical settings to
+  the vLLM baseline.
+- The memory strategy is explicit: tensor parallel, expert parallel,
+  quantized, or a documented combination.
 
 ## Correctness Rules
 

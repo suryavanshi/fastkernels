@@ -10,6 +10,18 @@ from .qwen36_decode import (
     reference_qwen36_deltanet_decode,
     reference_qwen36_moe_decode,
 )
+from .qwen36_real import (
+    Qwen36RealDecodeState,
+    initial_qwen36_real_decode_state,
+    qwen36_real_attention_moe_layer,
+    qwen36_real_attention_update,
+    qwen36_real_deltanet_moe_layer,
+    qwen36_real_deltanet_update,
+    qwen36_real_deltanet_update_from_convolved_projections,
+    qwen36_real_deltanet_update_from_projections,
+    qwen36_real_moe_update,
+    qwen36_real_rms_norm,
+)
 
 __all__ = [
     "Qwen36DecodeState",
@@ -22,4 +34,14 @@ __all__ = [
     "reference_qwen36_deltanet_decode",
     "reference_qwen36_moe_decode",
     "reference_routed_moe",
+    "Qwen36RealDecodeState",
+    "initial_qwen36_real_decode_state",
+    "qwen36_real_attention_moe_layer",
+    "qwen36_real_attention_update",
+    "qwen36_real_deltanet_moe_layer",
+    "qwen36_real_deltanet_update",
+    "qwen36_real_deltanet_update_from_convolved_projections",
+    "qwen36_real_deltanet_update_from_projections",
+    "qwen36_real_moe_update",
+    "qwen36_real_rms_norm",
 ]
